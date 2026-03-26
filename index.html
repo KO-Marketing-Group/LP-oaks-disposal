@@ -159,29 +159,31 @@
         note.textContent = '';
         note.style.color = '';
 
-        fetch('mailchimp-subscribe.php', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ email: email }),
-        })
-          .then(function (res) { return res.json(); })
-          .then(function (data) {
-            if (data.success) {
-              form.innerHTML   = '<p style="font-weight:600;">You\'re on the list! We\'ll be in touch soon.</p>';
+        var cbName = 'mc_cb_' + formId;
+        var url = 'https://oaksinc.us14.list-manage.com/subscribe/post-json?u=7000b01c6fca099f9c5234539&id=f31112e9ba&f_id=003fbae0f0&EMAIL=' + encodeURIComponent(email) + '&c=' + cbName;
+
+        var script = document.createElement('script');
+        window[cbName] = function (data) {
+          if (data.result === 'success') {
+            form.innerHTML = '<p style="font-weight:600;">You\'re on the list! We\'ll be in touch soon.</p>';
+            note.textContent = '';
+          } else {
+            var msg = data.msg || 'Something went wrong. Please try again.';
+            if (msg.indexOf('already subscribed') > -1) {
+              form.innerHTML = '<p style="font-weight:600;">You\'re already on the list! We\'ll be in touch soon.</p>';
               note.textContent = '';
             } else {
-              note.textContent = data.error || 'Something went wrong. Please try again.';
+              note.innerHTML = msg;
               note.style.color = '#c0392b';
-              btn.disabled    = false;
+              btn.disabled = false;
               btn.textContent = origText;
             }
-          })
-          .catch(function () {
-            note.textContent = 'Network error. Please try again.';
-            note.style.color = '#c0392b';
-            btn.disabled    = false;
-            btn.textContent = origText;
-          });
+          }
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        };
+        script.src = url;
+        document.body.appendChild(script);
       });
     }
 
