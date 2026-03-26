@@ -33,8 +33,11 @@
       <h1>Reliable Garbage Service Is Coming to Rochester</h1>
       <p>Oaks Disposal Service is a locally owned garbage company bringing dependable, affordable residential waste management to Rochester, NY and the surrounding communities. No more missed pickups. No more surprise charges. No more calling a national hotline to sort out your weekly trash pickup. We're launching soon, and we'd love for you to be among the first to know.</p>
       <form class="signup-form" id="hero-form">
-        <input type="email" name="email" placeholder="Enter your email address" required>
-        <button type="submit">Notify Me</button>
+        <div class="form-fields">
+          <input type="email" name="email" placeholder="Enter your email address" required tabindex="1">
+          <input type="text" name="zipcode" placeholder="Zipcode" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" tabindex="2">
+        </div>
+        <button type="submit" tabindex="3">Notify Me</button>
       </form>
       <p class="form-note" id="hero-form-note">No spam, ever. Just a launch announcement &amp; early-bird pricing.</p>
     </div>
@@ -128,8 +131,11 @@
     <h2>Join Our Newsletter</h2>
     <p>Oaks Disposal is rolling out residential garbage pickup and waste disposal services across Rochester! Sign up for our newsletter and get notified the moment we go live in your neighborhood.</p>
     <form class="signup-form" id="cta-form">
-      <input type="email" name="email" placeholder="Your email address" required>
-      <button type="submit">Get Early Access</button>
+      <div class="form-fields">
+        <input type="email" name="email" placeholder="Your email address" required tabindex="10">
+        <input type="text" name="zipcode" placeholder="Zipcode" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" tabindex="11">
+      </div>
+      <button type="submit" tabindex="12">Get Early Access</button>
     </form>
     <p class="form-note" id="cta-form-note">We respect your privacy. Unsubscribe anytime.</p>
   </section>
@@ -150,9 +156,17 @@
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        var email  = form.querySelector('input[type="email"]').value.trim();
-        var btn    = form.querySelector('button[type="submit"]');
+        var email   = form.querySelector('input[type="email"]').value.trim();
+        var zipInput = form.querySelector('input[name="zipcode"]');
+        var zipcode = zipInput ? zipInput.value.replace(/\D/g, '').slice(0, 5) : '';
+        var btn     = form.querySelector('button[type="submit"]');
         var origText = btn.textContent;
+
+        if (zipcode && zipcode.length !== 5) {
+          note.textContent = 'Please enter a valid 5-digit zipcode.';
+          note.style.color = '#c0392b';
+          return;
+        }
 
         btn.disabled    = true;
         btn.textContent = 'Submitting…';
@@ -160,7 +174,7 @@
         note.style.color = '';
 
         var cbName = 'mc_cb_' + formId.replace(/\W/g, '') + '_' + Date.now();
-        var url = 'https://oaksinc.us14.list-manage.com/subscribe/post-json?u=7000b01c6fca099f9c5234539&id=f31112e9ba&f_id=003fbae0f0&tags=7360173&EMAIL=' + encodeURIComponent(email) + '&c=' + cbName;
+        var url = 'https://oaksinc.us14.list-manage.com/subscribe/post-json?u=7000b01c6fca099f9c5234539&id=f31112e9ba&f_id=003fbae0f0&tags=7360173&EMAIL=' + encodeURIComponent(email) + (zipcode ? '&ZIPCODE=' + encodeURIComponent(zipcode) : '') + '&c=' + cbName;
 
         var script = document.createElement('script');
         script.onerror = function () {
@@ -197,6 +211,12 @@
 
     initSignupForm('hero-form', 'hero-form-note');
     initSignupForm('cta-form',  'cta-form-note');
+
+    document.querySelectorAll('input[name="zipcode"]').forEach(function (input) {
+      input.addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 5);
+      });
+    });
   </script>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>

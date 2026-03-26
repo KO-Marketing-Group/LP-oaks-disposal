@@ -143,6 +143,7 @@ nav a {
 /* ── EMAIL FORM ── */
 .signup-form {
   display: flex;
+  flex-direction: column;
   gap: 0;
   max-width: 480px;
   margin: 0 auto;
@@ -151,12 +152,26 @@ nav a {
   box-shadow: 0 8px 30px rgba(0,0,0,0.2);
 }
 
+.signup-form .form-fields {
+  display: flex;
+  gap: 0;
+}
+
 .signup-form input {
-  flex: 1;
   padding: 16px 20px;
   border: none;
   font-size: 1rem;
   outline: none;
+}
+
+.signup-form input[name="email"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.signup-form input[name="zipcode"] {
+  width: 110px;
+  border-left: 1px solid #e0e0e0;
 }
 
 .signup-form button {
@@ -441,8 +456,9 @@ footer a:hover {
   .hero { min-height: 440px; padding: 50px 20px; }
   .hero h1 { font-size: 2rem; }
   .hero p { font-size: 1rem; }
-  .signup-form { flex-direction: column; border-radius: 8px; }
-  .signup-form input { border-radius: 8px 8px 0 0; }
+  .signup-form { border-radius: 8px; }
+  .signup-form .form-fields { flex-direction: column; }
+  .signup-form input[name="zipcode"] { width: 100%; border-left: none; border-top: 1px solid #e0e0e0; }
   .signup-form button { border-radius: 0 0 8px 8px; padding: 14px; }
   .services { padding: 50px 24px; }
   .services-grid { grid-template-columns: 1fr; gap: 20px; }
