@@ -149,7 +149,6 @@ nav a {
   margin: 0 auto;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
 }
 
 .signup-form .form-fields {
@@ -184,6 +183,9 @@ nav a {
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.2s;
+  margin-top: 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+
 }
 
 .signup-form button:hover {
