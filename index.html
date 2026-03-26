@@ -159,10 +159,18 @@
         note.textContent = '';
         note.style.color = '';
 
-        var cbName = 'mc_cb_' + formId;
-        var url = 'https://oaksinc.us14.list-manage.com/subscribe/post-json?u=7000b01c6fca099f9c5234539&id=f31112e9ba&f_id=003fbae0f0&EMAIL=' + encodeURIComponent(email) + '&c=' + cbName;
+        var cbName = 'mc_cb_' + formId + '_' + Date.now();
+        var url = 'https://oaksinc.us14.list-manage.com/subscribe/post-json?u=7000b01c6fca099f9c5234539&id=f31112e9ba&f_id=003fbae0f0&tags=7360173&EMAIL=' + encodeURIComponent(email) + '&c=' + cbName;
 
         var script = document.createElement('script');
+        script.onerror = function () {
+          note.textContent = 'Network error. Please try again.';
+          note.style.color = '#c0392b';
+          btn.disabled = false;
+          btn.textContent = origText;
+          delete window[cbName];
+          if (script.parentNode) script.parentNode.removeChild(script);
+        };
         window[cbName] = function (data) {
           if (data.result === 'success') {
             form.innerHTML = '<p style="font-weight:600;">You\'re on the list! We\'ll be in touch soon.</p>';
