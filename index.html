@@ -159,7 +159,7 @@
         note.textContent = '';
         note.style.color = '';
 
-        var cbName = 'mc_cb_' + formId + '_' + Date.now();
+        var cbName = 'mc_cb_' + formId.replace(/\W/g, '') + '_' + Date.now();
         var url = 'https://oaksinc.us14.list-manage.com/subscribe/post-json?u=7000b01c6fca099f9c5234539&id=f31112e9ba&f_id=003fbae0f0&tags=7360173&EMAIL=' + encodeURIComponent(email) + '&c=' + cbName;
 
         var script = document.createElement('script');
