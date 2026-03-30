@@ -22,7 +22,7 @@ nav {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 60px;
+  padding: 10px 60px;
   background: var(--white);
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
@@ -33,7 +33,7 @@ nav {
 }
 
 .logo-img {
-  height: 48px;
+  height: 60px;
   width: auto;
   object-fit: contain;
 }
