@@ -8,6 +8,19 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
 })(window,document,'script','dataLayer','GTM-5GCX3DVQ');</script>
 <!-- End Google Tag Manager -->
+<script>
+window.__LOCATION__ = {
+  slug: 'rochester',
+  city: 'Rochester',
+  state: 'NY',
+  phone: '',
+  phoneDigits: '',
+  metaPixelId: '',
+  stackadaptPixelId: '',
+  stackadaptConvId: '',
+  googleAdId: ''
+};
+</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="index, follow, noarchive, noimageindex">
@@ -156,10 +169,29 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   </footer>
 
   <script>
+    window.dataLayer = window.dataLayer || [];
+    var formStarted = {};
+    var formSubmitted = {};
+
+    function getFormLocation(formId) {
+      return formId === 'hero-form' ? 'hero' : 'cta';
+    }
+
     function initSignupForm(formId, noteId) {
       var form = document.getElementById(formId);
       var note = document.getElementById(noteId);
       if (!form) return;
+      var loc = getFormLocation(formId);
+
+      /* ── form_start: first focus on any field ── */
+      form.querySelectorAll('input').forEach(function (input) {
+        input.addEventListener('focus', function () {
+          if (!formStarted[formId]) {
+            formStarted[formId] = true;
+            dataLayer.push({ event: 'form_start', form_location: loc });
+          }
+        });
+      });
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -193,20 +225,33 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           if (script.parentNode) script.parentNode.removeChild(script);
         };
         window[cbName] = function (data) {
-          if (data.result === 'success') {
-            form.innerHTML = '<p style="font-weight:600;">You\'re on the list! We\'ll be in touch soon.</p>';
+          if (data.result === 'success' || (data.msg && data.msg.indexOf('already subscribed') > -1)) {
+            formSubmitted[formId] = true;
+            if (data.result === 'success') {
+              form.innerHTML = '<p style="font-weight:600;">You\'re on the list! We\'ll be in touch soon.</p>';
+            } else {
+              form.innerHTML = '<p style="font-weight:600;">You\'re already on the list! We\'ll be in touch soon.</p>';
+            }
             note.textContent = '';
+
+            /* ── generate_lead ── */
+            dataLayer.push({
+              event: 'generate_lead',
+              service_type: 'newsletter_signup',
+              form_location: loc,
+              landing_page: window.location.pathname,
+              value: 1,
+              currency: 'USD',
+              user_data: { email: email }
+            });
+            /* ── form_completion ── */
+            dataLayer.push({ event: 'form_completion', form_location: loc });
           } else {
             var msg = data.msg || 'Something went wrong. Please try again.';
-            if (msg.indexOf('already subscribed') > -1) {
-              form.innerHTML = '<p style="font-weight:600;">You\'re already on the list! We\'ll be in touch soon.</p>';
-              note.textContent = '';
-            } else {
-              note.innerHTML = msg;
-              note.style.color = '#c0392b';
-              btn.disabled = false;
-              btn.textContent = origText;
-            }
+            note.innerHTML = msg;
+            note.style.color = '#c0392b';
+            btn.disabled = false;
+            btn.textContent = origText;
           }
           delete window[cbName];
           if (script.parentNode) script.parentNode.removeChild(script);
@@ -224,6 +269,72 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         this.value = this.value.replace(/\D/g, '').slice(0, 5);
       });
     });
+
+    /* ── form_abandonment: page unload after form_start without submit ── */
+    window.addEventListener('beforeunload', function () {
+      for (var fid in formStarted) {
+        if (formStarted[fid] && !formSubmitted[fid]) {
+          dataLayer.push({ event: 'form_abandonment', form_location: getFormLocation(fid) });
+        }
+      }
+    });
+
+    /* ── click_to_email: mailto links ── */
+    document.querySelectorAll('a[href^="mailto:"]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        var section = a.closest('footer') ? 'footer' : a.closest('.hero') ? 'hero' : 'body';
+        dataLayer.push({
+          event: 'click_to_email',
+          event_label: a.getAttribute('href').replace('mailto:', ''),
+          link_location: section
+        });
+      });
+    });
+
+    /* ── click_to_call: tel links (wired up for when phone is added) ── */
+    document.querySelectorAll('a[href^="tel:"]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        var section = a.closest('nav') ? 'nav' : a.closest('footer') ? 'footer' : 'body';
+        dataLayer.push({
+          event: 'click_to_call',
+          event_label: a.getAttribute('href').replace('tel:', ''),
+          link_location: section
+        });
+      });
+    });
+
+    /* ── outbound_click: external links ── */
+    document.querySelectorAll('a[href]').forEach(function (a) {
+      if (a.hostname && a.hostname !== window.location.hostname && !a.href.startsWith('mailto:') && !a.href.startsWith('tel:')) {
+        a.addEventListener('click', function () {
+          var section = a.closest('footer') ? 'footer' : a.closest('nav') ? 'nav' : 'body';
+          dataLayer.push({
+            event: 'outbound_click',
+            event_label: a.href,
+            link_text: a.textContent.trim(),
+            link_location: section
+          });
+        });
+      }
+    });
+
+    /* ── scroll_depth: 25%, 50%, 75%, 100% milestones ── */
+    (function () {
+      var milestones = [25, 50, 75, 100];
+      var fired = {};
+      window.addEventListener('scroll', function () {
+        var scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        var docHeight = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        if (docHeight <= 0) return;
+        var pct = Math.round((scrollTop / docHeight) * 100);
+        milestones.forEach(function (m) {
+          if (pct >= m && !fired[m]) {
+            fired[m] = true;
+            dataLayer.push({ event: 'scroll_depth', percent_scrolled: m });
+          }
+        });
+      });
+    })();
   </script>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
