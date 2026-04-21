@@ -128,7 +128,13 @@ app.use((req, res, next) => {
   next();
 });
 
-app.get('/health', async (req, res) => {
+/* Liveness — nginx handles /live directly, this is here only as a fallback
+   if something is ever proxied to Node without a DB check. */
+app.get('/live', (req, res) => res.json({ ok: true }));
+
+/* Readiness — verifies the DB pool is responsive. 503 → Sevalla pulls the
+   pod out of the load balancer (but doesn't restart it). */
+app.get('/ready', async (req, res) => {
   try {
     await pool.query('SELECT 1');
     res.json({ ok: true });

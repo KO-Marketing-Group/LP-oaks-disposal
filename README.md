@@ -63,6 +63,15 @@ Visit http://localhost:8082/ and submit a test form. Verify:
 ## Database schema
 A single `leads` table is created on startup via `CREATE TABLE IF NOT EXISTS`. Schema in [`server.js`](server.js).
 
+## Health Probes
+
+| Probe | Path | Port | What it checks | Failure action |
+|-------|------|------|----------------|----------------|
+| Liveness | `/live` | 80 | nginx responding | Restart container |
+| Readiness | `/ready` | 80 | Node responding + MySQL `SELECT 1` succeeds | Remove from LB (no restart) |
+
+Configure both in Sevalla's probe settings. `/health` is kept as a legacy alias for `/live`.
+
 ## SendGrid Event Webhook
 Register `https://<production-host>/api/sendgrid-events` in SendGrid:
 **Settings → Mail Settings → Event Webhook**. Enable at minimum: *Dropped, Bounce, Deferred, Blocked, Spam Report*.
