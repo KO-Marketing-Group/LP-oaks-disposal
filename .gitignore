@@ -1,5 +1,6 @@
 .DS_Store
 .env
-.vscode/
+.vscode/*
+!.vscode/tasks.json
 *.code-workspace
 node_modules/

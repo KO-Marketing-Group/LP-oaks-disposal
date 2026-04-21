@@ -1,0 +1,42 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "staging: build & run",
+      "type": "shell",
+      "command": "docker build -t oaks-disposal-staging . && docker run --env-file .env -p 8082:80 --name oaks-disposal-staging oaks-disposal-staging",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "staging: stop",
+      "type": "shell",
+      "command": "docker stop oaks-disposal-staging",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "staging: restart",
+      "type": "shell",
+      "command": "docker restart oaks-disposal-staging",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "staging: logs",
+      "type": "shell",
+      "command": "docker logs -f oaks-disposal-staging",
+      "presentation": { "reveal": "always", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "staging: remove container",
+      "type": "shell",
+      "command": "docker rm -f oaks-disposal-staging",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -52,14 +52,26 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       <div class="badge">Coming Soon &bull; Rochester, NY</div>
       <h1>Reliable Garbage Service Is Coming to Rochester</h1>
       <p>Oaks Disposal Service is a locally owned garbage company bringing dependable, affordable residential waste management to Rochester, NY and the surrounding communities. No more missed pickups. No more surprise charges. No more calling a national hotline to sort out your weekly trash pickup. We're launching soon, and we'd love for you to be among the first to know.</p>
-      <form class="signup-form" id="hero-form">
-        <div class="form-fields">
-          <input type="email" name="email" placeholder="Enter your email address" required tabindex="1">
-          <input type="text" name="zipcode" placeholder="Zipcode" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" tabindex="2">
+      <form class="signup-form" id="hero-form" novalidate>
+        <div class="field-row">
+          <div class="field"><input type="text" name="first_name" placeholder="First Name" autocomplete="given-name" required tabindex="1"></div>
+          <div class="field"><input type="text" name="last_name" placeholder="Last Name" autocomplete="family-name" required tabindex="2"></div>
         </div>
-        <button type="submit" tabindex="3">Notify Me</button>
+        <div class="field-row">
+          <div class="field"><input type="email" name="email" placeholder="Email Address" autocomplete="email" required tabindex="3"></div>
+          <div class="field"><input type="tel" name="phone" placeholder="Phone (optional)" autocomplete="tel" inputmode="tel" maxlength="14" tabindex="4"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><input type="text" name="street" placeholder="Street Address" autocomplete="address-line1" required tabindex="5"></div>
+        </div>
+        <div class="field-row address-row">
+          <div class="field"><input type="text" name="city" placeholder="City" autocomplete="address-level2" required tabindex="6"></div>
+          <div class="field"><select name="state" autocomplete="address-level1" required tabindex="7" aria-label="State"></select></div>
+          <div class="field"><input type="text" name="zipcode" placeholder="Zipcode" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="postal-code" required tabindex="8"></div>
+        </div>
+        <button type="submit" tabindex="9">Reserve My Spot</button>
       </form>
-      <p class="form-note" id="hero-form-note">No spam, ever. Just a launch announcement &amp; early-bird pricing.</p>
+      <p class="form-note" id="hero-form-note">We'll reach out the moment service launches in your area. No spam, ever.</p>
     </div>
   </section>
 
@@ -150,14 +162,26 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
   <section class="cta-bottom">
     <h2>Join Our Newsletter</h2>
     <p>Oaks Disposal is rolling out residential garbage pickup and waste disposal services across Rochester! Sign up for our newsletter and get notified the moment we go live in your neighborhood.</p>
-    <form class="signup-form" id="cta-form">
-      <div class="form-fields">
-        <input type="email" name="email" placeholder="Your email address" required tabindex="10">
-        <input type="text" name="zipcode" placeholder="Zipcode" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" tabindex="11">
+    <form class="signup-form" id="cta-form" novalidate>
+      <div class="field-row">
+        <div class="field"><input type="text" name="first_name" placeholder="First Name" autocomplete="given-name" required tabindex="20"></div>
+        <div class="field"><input type="text" name="last_name" placeholder="Last Name" autocomplete="family-name" required tabindex="21"></div>
       </div>
-      <button type="submit" tabindex="12">Get Early Access</button>
+      <div class="field-row">
+        <div class="field"><input type="email" name="email" placeholder="Email Address" autocomplete="email" required tabindex="22"></div>
+        <div class="field"><input type="tel" name="phone" placeholder="Phone (optional)" autocomplete="tel" inputmode="tel" maxlength="14" tabindex="23"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><input type="text" name="street" placeholder="Street Address" autocomplete="address-line1" required tabindex="24"></div>
+      </div>
+      <div class="field-row address-row">
+        <div class="field"><input type="text" name="city" placeholder="City" autocomplete="address-level2" required tabindex="25"></div>
+        <div class="field"><select name="state" autocomplete="address-level1" required tabindex="26" aria-label="State"></select></div>
+        <div class="field"><input type="text" name="zipcode" placeholder="Zipcode" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="postal-code" required tabindex="27"></div>
+      </div>
+      <button type="submit" tabindex="28">Join the Waitlist</button>
     </form>
-    <p class="form-note" id="cta-form-note">We respect your privacy. Unsubscribe anytime.</p>
+    <p class="form-note" id="cta-form-note">We respect your privacy. We'll only contact you about Oaks Disposal.</p>
   </section>
 
   <!-- FOOTER -->
@@ -173,102 +197,202 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     var formStarted = {};
     var formSubmitted = {};
 
-    function getFormLocation(formId) {
-      return formId === 'hero-form' ? 'hero' : 'cta';
+    /* ── US states (default NY) ───────────────────────── */
+    var US_STATES = [
+      ['AL','Alabama'],['AK','Alaska'],['AZ','Arizona'],['AR','Arkansas'],['CA','California'],
+      ['CO','Colorado'],['CT','Connecticut'],['DE','Delaware'],['DC','District of Columbia'],
+      ['FL','Florida'],['GA','Georgia'],['HI','Hawaii'],['ID','Idaho'],['IL','Illinois'],
+      ['IN','Indiana'],['IA','Iowa'],['KS','Kansas'],['KY','Kentucky'],['LA','Louisiana'],
+      ['ME','Maine'],['MD','Maryland'],['MA','Massachusetts'],['MI','Michigan'],['MN','Minnesota'],
+      ['MS','Mississippi'],['MO','Missouri'],['MT','Montana'],['NE','Nebraska'],['NV','Nevada'],
+      ['NH','New Hampshire'],['NJ','New Jersey'],['NM','New Mexico'],['NY','New York'],
+      ['NC','North Carolina'],['ND','North Dakota'],['OH','Ohio'],['OK','Oklahoma'],
+      ['OR','Oregon'],['PA','Pennsylvania'],['RI','Rhode Island'],['SC','South Carolina'],
+      ['SD','South Dakota'],['TN','Tennessee'],['TX','Texas'],['UT','Utah'],['VT','Vermont'],
+      ['VA','Virginia'],['WA','Washington'],['WV','West Virginia'],['WI','Wisconsin'],['WY','Wyoming']
+    ];
+    document.querySelectorAll('select[name="state"]').forEach(function (sel) {
+      US_STATES.forEach(function (s) {
+        var opt = document.createElement('option');
+        opt.value = s[0];
+        opt.textContent = s[1];
+        if (s[0] === 'NY') opt.selected = true;
+        sel.appendChild(opt);
+      });
+    });
+
+    /* ── Validators ───────────────────────────────────── */
+    function isValidEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+    function digitsOnly(v)   { return (v || '').replace(/\D/g, ''); }
+    function isValidPhone(v) { var d = digitsOnly(v); return d.length === 0 || d.length === 10; }
+
+    /* ── Phone masking: format as (XXX) XXX-XXXX ───── */
+    function maskPhone(v) {
+      var d = digitsOnly(v).slice(0, 10);
+      if (d.length === 0) return '';
+      if (d.length < 4)   return '(' + d;
+      if (d.length < 7)   return '(' + d.slice(0,3) + ') ' + d.slice(3);
+      return '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+    }
+    document.querySelectorAll('input[name="phone"]').forEach(function (input) {
+      input.addEventListener('input', function () { this.value = maskPhone(this.value); });
+    });
+    document.querySelectorAll('input[name="zipcode"]').forEach(function (input) {
+      input.addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 5);
+      });
+    });
+
+    /* ── Field-level error display ───────────────────── */
+    function setError(field, msg) {
+      field.classList.add('has-error');
+      var wrap = field.parentElement;
+      var err = wrap.querySelector('.field-error');
+      if (!err) {
+        err = document.createElement('span');
+        err.className = 'field-error';
+        wrap.appendChild(err);
+      }
+      err.textContent = msg;
+    }
+    function clearError(field) {
+      field.classList.remove('has-error');
+      var err = field.parentElement.querySelector('.field-error');
+      if (err) err.remove();
     }
 
+    function validateForm(form) {
+      var ok = true;
+      var required = ['first_name','last_name','email','street','city','state','zipcode'];
+      required.forEach(function (name) {
+        var f = form.querySelector('[name="' + name + '"]');
+        if (!f) return;
+        if (!f.value.trim()) { setError(f, 'Required'); ok = false; }
+        else clearError(f);
+      });
+      var email = form.querySelector('[name="email"]');
+      if (email.value.trim() && !isValidEmail(email.value.trim())) {
+        setError(email, 'Enter a valid email'); ok = false;
+      }
+      var zip = form.querySelector('[name="zipcode"]');
+      if (zip.value.trim() && !/^\d{5}$/.test(zip.value.trim())) {
+        setError(zip, '5-digit zipcode'); ok = false;
+      }
+      var phone = form.querySelector('[name="phone"]');
+      if (phone && phone.value.trim() && !isValidPhone(phone.value)) {
+        setError(phone, 'Enter a 10-digit phone'); ok = false;
+      }
+      return ok;
+    }
+
+    /* ── Tracking params captured once ──────────────── */
+    var TRACKING = (function () {
+      var p = new URLSearchParams(window.location.search);
+      return {
+        landing_page: window.location.pathname,
+        referrer: document.referrer || '',
+        user_agent: navigator.userAgent,
+        gclid: p.get('gclid') || '',
+        utm_source: p.get('utm_source') || '',
+        utm_medium: p.get('utm_medium') || '',
+        utm_campaign: p.get('utm_campaign') || '',
+        utm_content: p.get('utm_content') || '',
+        utm_term: p.get('utm_term') || ''
+      };
+    })();
+
+    function getFormLocation(formId) { return formId === 'hero-form' ? 'hero' : 'cta'; }
+
+    /* ── Main form handler ───────────────────────────── */
     function initSignupForm(formId, noteId) {
       var form = document.getElementById(formId);
       var note = document.getElementById(noteId);
       if (!form) return;
       var loc = getFormLocation(formId);
 
-      /* ── form_start: first focus on any field ── */
-      form.querySelectorAll('input').forEach(function (input) {
+      /* form_start: first focus on any field */
+      form.querySelectorAll('input, select').forEach(function (input) {
         input.addEventListener('focus', function () {
           if (!formStarted[formId]) {
             formStarted[formId] = true;
             dataLayer.push({ event: 'form_start', form_location: loc });
           }
         });
+        input.addEventListener('blur', function () {
+          if (this.value.trim()) clearError(this);
+        });
       });
 
       form.addEventListener('submit', function (e) {
         e.preventDefault();
-        var email   = form.querySelector('input[type="email"]').value.trim();
-        var zipInput = form.querySelector('input[name="zipcode"]');
-        var zipcode = zipInput ? zipInput.value.replace(/\D/g, '').slice(0, 5) : '';
-        var btn     = form.querySelector('button[type="submit"]');
-        var origText = btn.textContent;
-
-        if (zipcode && zipcode.length !== 5) {
-          note.textContent = 'Please enter a valid 5-digit zipcode.';
+        if (!validateForm(form)) {
+          note.textContent = 'Please correct the highlighted fields.';
           note.style.color = '#c0392b';
           return;
         }
 
-        btn.disabled    = true;
+        var btn = form.querySelector('button[type="submit"]');
+        var origText = btn.textContent;
+        btn.disabled = true;
         btn.textContent = 'Submitting…';
         note.textContent = '';
         note.style.color = '';
 
-        var cbName = 'mc_cb_' + formId.replace(/\W/g, '') + '_' + Date.now();
-        var url = 'https://oaksinc.us14.list-manage.com/subscribe/post-json?u=7000b01c6fca099f9c5234539&id=f31112e9ba&f_id=003fbae0f0&tags=7360173&EMAIL=' + encodeURIComponent(email) + (zipcode ? '&ZIPCODE=' + encodeURIComponent(zipcode) : '') + '&c=' + cbName;
+        var fields = {
+          first_name: form.querySelector('[name="first_name"]').value.trim(),
+          last_name:  form.querySelector('[name="last_name"]').value.trim(),
+          email:      form.querySelector('[name="email"]').value.trim(),
+          phone:      digitsOnly(form.querySelector('[name="phone"]').value),
+          street:     form.querySelector('[name="street"]').value.trim(),
+          city:       form.querySelector('[name="city"]').value.trim(),
+          state:      form.querySelector('[name="state"]').value.trim().toUpperCase(),
+          zipcode:    form.querySelector('[name="zipcode"]').value.trim()
+        };
 
-        var script = document.createElement('script');
-        script.onerror = function () {
-          note.textContent = 'Network error. Please try again.';
+        /* GTM dataLayer pushes BEFORE fetch so conversions record even on server error */
+        dataLayer.push({
+          event: 'generate_lead',
+          service_type: 'waitlist_signup',
+          form_location: loc,
+          landing_page: TRACKING.landing_page,
+          value: 1,
+          currency: 'USD',
+          user_data: {
+            email: fields.email,
+            phone_number: fields.phone ? '+1' + fields.phone : '',
+            first_name: fields.first_name,
+            last_name: fields.last_name,
+            city: fields.city,
+            state: fields.state
+          }
+        });
+        dataLayer.push({ event: 'form_completion', form_location: loc });
+
+        var payload = Object.assign({ form_location: loc }, fields, TRACKING);
+
+        fetch('/api/lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(function (res) {
+          if (!res.ok) return res.json().then(function (d) { throw new Error(d.error || 'Request failed'); });
+          return res.json();
+        }).then(function () {
+          formSubmitted[formId] = true;
+          form.innerHTML = '<p style="font-weight:600;">You\'re on the list! We\'ll reach out when service launches in your area.</p>';
+          note.textContent = '';
+        }).catch(function (err) {
+          console.error('[form] submission failed:', err);
+          note.textContent = 'Something went wrong. Please try again or email info@oaksdisposal.com.';
           note.style.color = '#c0392b';
           btn.disabled = false;
           btn.textContent = origText;
-          delete window[cbName];
-          if (script.parentNode) script.parentNode.removeChild(script);
-        };
-        window[cbName] = function (data) {
-          if (data.result === 'success' || (data.msg && data.msg.indexOf('already subscribed') > -1)) {
-            formSubmitted[formId] = true;
-            if (data.result === 'success') {
-              form.innerHTML = '<p style="font-weight:600;">You\'re on the list! We\'ll be in touch soon.</p>';
-            } else {
-              form.innerHTML = '<p style="font-weight:600;">You\'re already on the list! We\'ll be in touch soon.</p>';
-            }
-            note.textContent = '';
-
-            /* ── generate_lead ── */
-            dataLayer.push({
-              event: 'generate_lead',
-              service_type: 'newsletter_signup',
-              form_location: loc,
-              landing_page: window.location.pathname,
-              value: 1,
-              currency: 'USD',
-              user_data: { email: email }
-            });
-            /* ── form_completion ── */
-            dataLayer.push({ event: 'form_completion', form_location: loc });
-          } else {
-            var msg = data.msg || 'Something went wrong. Please try again.';
-            note.innerHTML = msg;
-            note.style.color = '#c0392b';
-            btn.disabled = false;
-            btn.textContent = origText;
-          }
-          delete window[cbName];
-          if (script.parentNode) script.parentNode.removeChild(script);
-        };
-        script.src = url;
-        document.body.appendChild(script);
+        });
       });
     }
 
     initSignupForm('hero-form', 'hero-form-note');
     initSignupForm('cta-form',  'cta-form-note');
-
-    document.querySelectorAll('input[name="zipcode"]').forEach(function (input) {
-      input.addEventListener('input', function () {
-        this.value = this.value.replace(/\D/g, '').slice(0, 5);
-      });
-    });
 
     /* ── form_abandonment: page unload after form_start without submit ── */
     window.addEventListener('beforeunload', function () {

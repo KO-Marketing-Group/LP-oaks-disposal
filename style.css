@@ -115,56 +115,103 @@ nav a {
   margin: 0 auto 40px;
 }
 
-/* ── EMAIL FORM ── */
+/* ── SIGNUP FORM ── */
 .signup-form {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  max-width: 480px;
+  gap: 10px;
+  max-width: 520px;
   margin: 0 auto;
-  border-radius: 8px;
-  overflow: hidden;
+  background: var(--white);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+  text-align: left;
 }
 
-.signup-form .form-fields {
+.signup-form .field-row {
   display: flex;
-  gap: 0;
+  gap: 10px;
 }
 
-.signup-form input {
-  padding: 16px 20px;
-  border: none;
-  font-size: 1rem;
-  outline: none;
-}
-
-.signup-form input[name="email"] {
+.signup-form .field {
   flex: 1;
   min-width: 0;
+  position: relative;
 }
 
-.signup-form input[name="zipcode"] {
-  width: 110px;
-  border-left: 1px solid #e0e0e0;
+.signup-form .address-row .field:nth-child(2) {
+  flex: 0 0 120px;
+}
+
+.signup-form .address-row .field:nth-child(3) {
+  flex: 0 0 110px;
+}
+
+.signup-form input,
+.signup-form select {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #d8d8d8;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: var(--brand-dark);
+  background: var(--white);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.signup-form input:focus,
+.signup-form select:focus {
+  border-color: var(--brown);
+}
+
+.signup-form input.has-error,
+.signup-form select.has-error {
+  border-color: #c0392b;
+  background: #fff5f4;
+}
+
+.signup-form .field-error {
+  display: block;
+  color: #c0392b;
+  font-size: 0.75rem;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.signup-form select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23666'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 10px 6px;
+  padding-right: 32px;
 }
 
 .signup-form button {
-  padding: 16px 28px;
+  margin-top: 6px;
+  padding: 14px 28px;
   background: var(--brown);
   color: var(--white);
   border: none;
+  border-radius: 6px;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.2s;
-  margin-top: 16px;
-  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
-
 }
 
 .signup-form button:hover {
   background: #3D2A06;
+}
+
+.signup-form button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .form-note {
@@ -427,10 +474,11 @@ footer a:hover {
   .hero { min-height: 440px; padding: 50px 20px; }
   .hero h1 { font-size: 2rem; }
   .hero p { font-size: 1rem; }
-  .signup-form { border-radius: 8px; }
-  .signup-form .form-fields { flex-direction: column; }
-  .signup-form input[name="zipcode"] { width: 100%; border-left: none; border-top: 1px solid #e0e0e0; }
-  .signup-form button { border-radius: 0 0 8px 8px; padding: 14px; }
+  .signup-form { padding: 16px; }
+  .signup-form .field-row { flex-direction: column; gap: 10px; }
+  .signup-form .address-row { flex-direction: row; }
+  .signup-form .address-row .field:nth-child(2) { flex: 0 0 90px; }
+  .signup-form .address-row .field:nth-child(3) { flex: 0 0 90px; }
   .services { padding: 50px 24px; }
   .services-grid { grid-template-columns: 1fr; gap: 20px; }
   .why-section { flex-direction: column; padding: 50px 24px; }
