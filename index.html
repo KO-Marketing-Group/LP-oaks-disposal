@@ -30,7 +30,7 @@ window.__LOCATION__ = {
   <link rel="icon" type="image/png" href="ODS-Logo-Secondary-Bin.png">
   <link rel="apple-touch-icon" href="ODS-Logo-Secondary-Bin.png">
   <meta property="og:image" content="ODS-Logo-Secondary-Bin.png">
-  <link rel="stylesheet" href="style.css?v=20260421">
+  <link rel="stylesheet" href="style.css?v=20260421b">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 </head>
 <body>
@@ -379,7 +379,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           return res.json();
         }).then(function () {
           formSubmitted[formId] = true;
-          form.innerHTML = '<p style="font-weight:600;">You\'re on the list! We\'ll reach out when service launches in your area.</p>';
+          form.innerHTML = '<p style="font-weight:600;color:#222;">You\'re on the list! We\'ll reach out when service launches in your area.</p>';
           note.textContent = '';
         }).catch(function (err) {
           console.error('[form] submission failed:', err);
