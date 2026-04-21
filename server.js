@@ -20,6 +20,9 @@ const MC_LIST_ID = process.env.MC_LIST_ID;
 const MC_DC      = process.env.MC_DC || (MC_API_KEY ? MC_API_KEY.split('-')[1] : '');
 const MC_TAG     = process.env.MC_TAG || 'OaksDisposal';
 
+const DASHBOARD_USER     = process.env.DASHBOARD_USER;
+const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD;
+
 if (!SENDGRID_KEY || TO_EMAIL.length === 0 || !FROM_EMAIL) {
   console.warn('WARNING: Missing SendGrid env vars (SENDGRID_KEY, SENDGRID_TO, SENDGRID_FROM). Lead emails will fail.');
 }
@@ -28,6 +31,9 @@ if (!DB_HOST || !DB_USER || !DB_PASSWORD || !DB_DB) {
 }
 if (!MC_API_KEY || !MC_LIST_ID || !MC_DC) {
   console.warn('WARNING: Missing Mailchimp env vars (MC_API_KEY, MC_LIST_ID, MC_DC). Mailchimp sync will fail.');
+}
+if (!DASHBOARD_USER || !DASHBOARD_PASSWORD) {
+  console.warn('WARNING: Missing DASHBOARD_USER / DASHBOARD_PASSWORD. /dashboard will return 503 until configured.');
 }
 
 if (SENDGRID_KEY) sgMail.setApiKey(SENDGRID_KEY);
@@ -325,6 +331,50 @@ app.post('/sendgrid-events', express.json({ limit: '1mb' }), (req, res) => {
   res.status(200).end();
 });
 
+/* ── Dashboard (Basic Auth protected) ─────────────────────────────────────── */
+function timingSafeStringEq(a, b) {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+}
+
+function basicAuth(req, res, next) {
+  if (!DASHBOARD_USER || !DASHBOARD_PASSWORD) {
+    return res.status(503).type('text/plain').send('Dashboard not configured. Set DASHBOARD_USER and DASHBOARD_PASSWORD env vars.');
+  }
+  const header = req.headers.authorization || '';
+  const [scheme, token] = header.split(' ');
+  if (scheme === 'Basic' && token) {
+    const decoded = Buffer.from(token, 'base64').toString('utf8');
+    const sep = decoded.indexOf(':');
+    if (sep !== -1) {
+      const u = decoded.slice(0, sep);
+      const p = decoded.slice(sep + 1);
+      if (timingSafeStringEq(u, DASHBOARD_USER) && timingSafeStringEq(p, DASHBOARD_PASSWORD)) {
+        return next();
+      }
+    }
+  }
+  res.set('WWW-Authenticate', 'Basic realm="Oaks Dashboard", charset="UTF-8"');
+  res.status(401).type('text/plain').send('Authentication required');
+}
+
+app.get('/dashboard', basicAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, created_at, first_name, last_name, email, phone, street, city, state, zipcode,
+              form_location, gclid, utm_source, utm_medium, utm_campaign, ip_address
+       FROM leads ORDER BY created_at DESC LIMIT 500`
+    );
+    const [[totals]] = await pool.query('SELECT COUNT(*) AS total FROM leads');
+    res.set('Cache-Control', 'no-store');
+    res.type('html').send(renderDashboard(rows, totals.total));
+  } catch (err) {
+    console.error('[dashboard-error]', err.message);
+    res.status(500).type('text/plain').send('Database error loading dashboard');
+  }
+});
+
 /* ── Startup ──────────────────────────────────────────────────────────────── */
 ensureSchema().finally(() => {
   app.listen(3000, () => console.log('Lead mailer listening on :3000'));
@@ -421,4 +471,92 @@ function esc(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/* ── Dashboard renderer ───────────────────────────────────────────────────── */
+function renderDashboard(rows, total) {
+  const formatPhone = (p) => p
+    ? `(${p.slice(0,3)}) ${p.slice(3,6)}-${p.slice(6)}`
+    : '';
+  const formatDate = (d) => {
+    if (!d) return '';
+    const dt = new Date(d);
+    return dt.toLocaleString('en-US', {
+      year: 'numeric', month: 'short', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+  };
+  const inferSource = (r) => {
+    if (r.utm_source) return esc(r.utm_source);
+    if (r.gclid) return 'google_ads';
+    return '<span class="muted">direct</span>';
+  };
+
+  const tbody = rows.map(r => `<tr>
+    <td class="mono muted">${r.id}</td>
+    <td class="nowrap">${esc(formatDate(r.created_at))}</td>
+    <td>${esc(r.first_name)} ${esc(r.last_name)}</td>
+    <td><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td>
+    <td class="nowrap">${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(formatPhone(r.phone))}</a>` : '<span class="muted">—</span>'}</td>
+    <td>${esc(r.street)}<br><span class="muted">${esc(r.city)}, ${esc(r.state)} ${esc(r.zipcode)}</span></td>
+    <td>${esc(r.form_location || '')}</td>
+    <td>${inferSource(r)}</td>
+    <td class="mono muted">${esc(r.ip_address || '')}</td>
+  </tr>`).join('');
+
+  const emptyState = rows.length === 0
+    ? '<p class="empty">No leads yet. Submit the form on the main site to see entries here.</p>'
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Leads Dashboard | Oaks Disposal</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #222; background: #f5f5f5; }
+  header { background: #2d7a3a; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
+  header .stats { font-size: 0.85rem; opacity: 0.9; }
+  main { padding: 20px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 1200px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.08); font-size: 13px; }
+  th, td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #eee; }
+  th { background: #fafafa; font-weight: 600; color: #333; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; z-index: 1; }
+  tr:hover td { background: #fff8ee; }
+  td a { color: #2d7a3a; text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+  .muted { color: #888; }
+  .nowrap { white-space: nowrap; }
+  .empty { padding: 40px; text-align: center; color: #666; background: #fff; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Oaks Disposal — Leads</h1>
+  <div class="stats">Showing ${rows.length} of ${total} total · <a href="/" style="color:#fff;text-decoration:underline">site</a></div>
+</header>
+<main>
+  ${emptyState || `<table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Submitted</th>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Address</th>
+        <th>Form</th>
+        <th>Source</th>
+        <th>IP</th>
+      </tr>
+    </thead>
+    <tbody>${tbody}</tbody>
+  </table>`}
+</main>
+</body>
+</html>`;
 }

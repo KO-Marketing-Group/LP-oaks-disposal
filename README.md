@@ -38,7 +38,18 @@ MC_API_KEY=<mailchimp api key, format abc123...-us14>
 MC_LIST_ID=f31112e9ba
 MC_DC=us14
 MC_TAG=OaksDisposal
+
+# Dashboard (Basic Auth at /dashboard)
+DASHBOARD_USER=<admin username>
+DASHBOARD_PASSWORD=<admin password>
 ```
+
+## Dashboard
+Admin view of captured leads is served at `/dashboard`, protected with HTTP Basic Auth.
+- Set `DASHBOARD_USER` / `DASHBOARD_PASSWORD` env vars. If unset, the endpoint returns 503.
+- Shows the most recent 500 leads (newest first), plus a total count.
+- Columns: ID, submitted, name, email, phone, full address, form location (hero/cta), traffic source, IP.
+- `robots: noindex, nofollow` + `Cache-Control: no-store` — never indexed, never cached.
 
 ## Local development (Docker staging)
 - **Port:** 8082
