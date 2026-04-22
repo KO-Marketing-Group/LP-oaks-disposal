@@ -194,7 +194,12 @@ app.post('/lead', express.json({ limit: '10kb' }), async (req, res) => {
     return res.status(400).json({ error: 'Invalid fields', fields: errors });
   }
 
-  const ip = (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+  /* Cloudflare + Sevalla ingress + nginx = 3 proxy hops. Cloudflare's
+     CF-Connecting-IP is the authoritative original-client IP; fall back to
+     the leftmost X-Forwarded-For entry for non-CF traffic, then the socket
+     (which will be nginx's loopback). */
+  const ip = (req.headers['cf-connecting-ip'] || '').trim()
+    || (req.headers['x-forwarded-for'] || '').split(',')[0].trim()
     || req.socket.remoteAddress
     || 'unknown';
 
