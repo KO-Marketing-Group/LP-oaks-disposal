@@ -367,8 +367,21 @@ app.get('/dashboard', basicAuth, async (req, res) => {
        FROM leads ORDER BY created_at DESC LIMIT 500`
     );
     const [[totals]] = await pool.query('SELECT COUNT(*) AS total FROM leads');
+    const [dailyCounts] = await pool.query(
+      `SELECT DATE(created_at) AS day, COUNT(*) AS count
+       FROM leads
+       GROUP BY DATE(created_at)
+       ORDER BY day ASC`
+    );
+    const [zipCounts] = await pool.query(
+      `SELECT zipcode, COUNT(*) AS count
+       FROM leads
+       WHERE zipcode IS NOT NULL AND zipcode != ''
+       GROUP BY zipcode
+       ORDER BY count DESC`
+    );
     res.set('Cache-Control', 'no-store');
-    res.type('html').send(renderDashboard(rows, totals.total));
+    res.type('html').send(renderDashboard(rows, totals.total, dailyCounts, zipCounts));
   } catch (err) {
     console.error('[dashboard-error]', err.message);
     res.status(500).type('text/plain').send('Database error loading dashboard');
@@ -473,40 +486,66 @@ function esc(str) {
     .replace(/"/g, '&quot;');
 }
 
-/* ── Dashboard renderer ───────────────────────────────────────────────────── */
-function renderDashboard(rows, total) {
-  const formatPhone = (p) => p
-    ? `(${p.slice(0,3)}) ${p.slice(3,6)}-${p.slice(6)}`
-    : '';
-  const formatDate = (d) => {
-    if (!d) return '';
-    const dt = new Date(d);
-    return dt.toLocaleString('en-US', {
-      year: 'numeric', month: 'short', day: '2-digit',
-      hour: '2-digit', minute: '2-digit', hour12: false,
-    });
-  };
-  const inferSource = (r) => {
-    if (r.utm_source) return esc(r.utm_source);
-    if (r.gclid) return 'google_ads';
-    return '<span class="muted">direct</span>';
-  };
+/* ── Rochester-area zipcode centroids for the dashboard heatmap ──────────── */
+const ROCHESTER_ZIPS = {
+  '14410':[42.899,-77.433],'14420':[43.211,-77.944],'14423':[42.976,-77.854],
+  '14425':[42.890,-77.280],'14428':[43.103,-77.884],'14437':[42.564,-77.695],
+  '14445':[43.110,-77.489],'14450':[43.097,-77.442],'14467':[43.048,-77.611],
+  '14468':[43.289,-77.793],'14472':[42.957,-77.589],'14502':[43.067,-77.300],
+  '14513':[43.048,-77.093],'14514':[43.092,-77.789],'14516':[43.181,-77.096],
+  '14517':[42.578,-77.934],'14519':[43.224,-77.308],'14522':[43.060,-77.226],
+  '14526':[43.170,-77.473],'14534':[43.085,-77.515],'14559':[43.192,-77.802],
+  '14568':[43.140,-77.266],'14580':[43.211,-77.465],'14586':[43.010,-77.683],
+  '14602':[43.157,-77.609],'14604':[43.157,-77.610],'14605':[43.172,-77.604],
+  '14606':[43.181,-77.650],'14607':[43.151,-77.590],'14608':[43.152,-77.625],
+  '14609':[43.169,-77.571],'14610':[43.142,-77.572],'14611':[43.147,-77.641],
+  '14612':[43.231,-77.690],'14613':[43.172,-77.640],'14614':[43.158,-77.615],
+  '14615':[43.198,-77.658],'14616':[43.222,-77.674],'14617':[43.211,-77.601],
+  '14618':[43.129,-77.573],'14619':[43.143,-77.631],'14620':[43.134,-77.602],
+  '14621':[43.186,-77.606],'14622':[43.220,-77.606],'14623':[43.081,-77.628],
+  '14624':[43.142,-77.708],'14625':[43.151,-77.494],'14626':[43.221,-77.682],
+};
 
-  const tbody = rows.map(r => `<tr>
-    <td class="mono muted">${r.id}</td>
-    <td class="nowrap">${esc(formatDate(r.created_at))}</td>
-    <td>${esc(r.first_name)} ${esc(r.last_name)}</td>
-    <td><a href="mailto:${esc(r.email)}">${esc(r.email)}</a></td>
-    <td class="nowrap">${r.phone ? `<a href="tel:${esc(r.phone)}">${esc(formatPhone(r.phone))}</a>` : '<span class="muted">—</span>'}</td>
-    <td>${esc(r.street)}<br><span class="muted">${esc(r.city)}, ${esc(r.state)} ${esc(r.zipcode)}</span></td>
-    <td>${esc(r.form_location || '')}</td>
-    <td>${inferSource(r)}</td>
-    <td class="mono muted">${esc(r.ip_address || '')}</td>
-  </tr>`).join('');
+/* Safely embed JSON inside <script> — escape characters that could break out
+   of the tag or cause parsing weirdness across charsets. */
+function safeJson(obj) {
+  return JSON.stringify(obj)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
 
-  const emptyState = rows.length === 0
-    ? '<p class="empty">No leads yet. Submit the form on the main site to see entries here.</p>'
-    : '';
+function renderDashboard(rows, total, dailyCounts, zipCounts) {
+  /* Emit data the client JS consumes. Keep the shape tight — this is an
+     admin view loaded on demand, not a public API. */
+  const leadsJson = safeJson(rows.map(r => ({
+    id:            r.id,
+    created_at:    r.created_at,
+    first_name:    r.first_name,
+    last_name:     r.last_name,
+    email:         r.email,
+    phone:         r.phone,
+    street:        r.street,
+    city:          r.city,
+    state:         r.state,
+    zipcode:       r.zipcode,
+    form_location: r.form_location,
+    gclid:         r.gclid,
+    utm_source:    r.utm_source,
+    ip_address:    r.ip_address,
+  })));
+  const dailyJson = JSON.stringify(dailyCounts.map(d => ({
+    day:   d.day instanceof Date ? d.day.toISOString().slice(0,10) : String(d.day).slice(0,10),
+    count: Number(d.count),
+  })));
+  const zipsJson = JSON.stringify(zipCounts.map(z => ({
+    zipcode: String(z.zipcode).trim(),
+    count:   Number(z.count),
+  })));
+  const zipCoordsJson = JSON.stringify(ROCHESTER_ZIPS);
+
+  const empty = rows.length === 0;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -515,48 +554,255 @@ function renderDashboard(rows, total) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
 <title>Leads Dashboard | Oaks Disposal</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #222; background: #f5f5f5; }
   header { background: #2d7a3a; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
   header h1 { margin: 0; font-size: 1.1rem; font-weight: 600; }
   header .stats { font-size: 0.85rem; opacity: 0.9; }
-  main { padding: 20px; overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; min-width: 1200px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.08); font-size: 13px; }
+  header a { color: #fff; text-decoration: underline; }
+  main { padding: 20px; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+  @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+  .card { background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; }
+  #line-chart { width: 100%; height: 240px; }
+  #line-chart .axis { stroke: #ccc; stroke-width: 1; }
+  #line-chart .grid { stroke: #eee; stroke-width: 1; }
+  #line-chart .line { fill: none; stroke: #2d7a3a; stroke-width: 2; }
+  #line-chart .dot { fill: #2d7a3a; }
+  #line-chart text { fill: #666; font-size: 10px; font-family: inherit; }
+  #lead-map { width: 100%; height: 320px; border-radius: 4px; }
+  .table-wrap { background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 1100px; font-size: 13px; }
   th, td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid #eee; }
-  th { background: #fafafa; font-weight: 600; color: #333; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; z-index: 1; }
+  th { background: #fafafa; font-weight: 600; color: #333; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
   tr:hover td { background: #fff8ee; }
   td a { color: #2d7a3a; text-decoration: none; }
   td a:hover { text-decoration: underline; }
   .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
   .muted { color: #888; }
   .nowrap { white-space: nowrap; }
+  .pager { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #fafafa; border-top: 1px solid #eee; font-size: 13px; }
+  .pager button { padding: 6px 14px; border: 1px solid #ccc; background: #fff; border-radius: 4px; cursor: pointer; font: inherit; }
+  .pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pager .info { color: #666; }
   .empty { padding: 40px; text-align: center; color: #666; background: #fff; border-radius: 4px; }
+  .leaflet-popup-content { font-size: 13px; }
 </style>
 </head>
 <body>
 <header>
   <h1>Oaks Disposal — Leads</h1>
-  <div class="stats">Showing ${rows.length} of ${total} total · <a href="/" style="color:#fff;text-decoration:underline">site</a></div>
+  <div class="stats">${total} total · <a href="/">site</a></div>
 </header>
 <main>
-  ${emptyState || `<table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Submitted</th>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Address</th>
-        <th>Form</th>
-        <th>Source</th>
-        <th>IP</th>
-      </tr>
-    </thead>
-    <tbody>${tbody}</tbody>
-  </table>`}
+  ${empty ? '<p class="empty">No leads yet. Submit the form on the main site to see entries here.</p>' : `
+  <div class="charts">
+    <div class="card">
+      <h2>Submissions per day</h2>
+      <svg id="line-chart" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+    </div>
+    <div class="card">
+      <h2>Submissions by zipcode</h2>
+      <div id="lead-map"></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>Submitted</th><th>Name</th><th>Email</th>
+          <th>Phone</th><th>Address</th><th>Form</th><th>Source</th><th>IP</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="pager">
+      <span class="info" id="pager-info"></span>
+      <div>
+        <button id="prev-page">‹ Prev</button>
+        <button id="next-page">Next ›</button>
+      </div>
+    </div>
+  </div>
+  `}
 </main>
+
+<script>window.__LEADS__ = ${leadsJson};</script>
+<script>window.__DAILY__ = ${dailyJson};</script>
+<script>window.__ZIPS__ = ${zipsJson};</script>
+<script>window.__ZIP_COORDS__ = ${zipCoordsJson};</script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function () {
+  var leads = window.__LEADS__ || [];
+  if (leads.length === 0) return;
+
+  /* ── Table pagination (10 rows/page) ─────────────────────────────────── */
+  var PAGE_SIZE = 10;
+  var page = 0;
+  var totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
+
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function fmtPhone(p) {
+    return p ? '(' + p.slice(0,3) + ') ' + p.slice(3,6) + '-' + p.slice(6) : '';
+  }
+  function fmtDate(d) {
+    if (!d) return '';
+    var dt = new Date(d);
+    if (isNaN(dt)) return esc(String(d));
+    return dt.toLocaleString('en-US', {
+      year:'numeric', month:'short', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false,
+    });
+  }
+  function inferSource(r) {
+    if (r.utm_source) return esc(r.utm_source);
+    if (r.gclid) return 'google_ads';
+    return '<span class="muted">direct</span>';
+  }
+
+  function renderTable() {
+    var start = page * PAGE_SIZE;
+    var slice = leads.slice(start, start + PAGE_SIZE);
+    document.getElementById('tbody').innerHTML = slice.map(function (r) {
+      return '<tr>'
+        + '<td class="mono muted">' + r.id + '</td>'
+        + '<td class="nowrap">' + esc(fmtDate(r.created_at)) + '</td>'
+        + '<td>' + esc(r.first_name || '') + ' ' + esc(r.last_name || '') + '</td>'
+        + '<td><a href="mailto:' + esc(r.email) + '">' + esc(r.email) + '</a></td>'
+        + '<td class="nowrap">' + (r.phone
+            ? '<a href="tel:' + esc(r.phone) + '">' + esc(fmtPhone(r.phone)) + '</a>'
+            : '<span class="muted">—</span>') + '</td>'
+        + '<td>' + esc(r.street || '') + '<br><span class="muted">'
+            + esc(r.city || '') + ', ' + esc(r.state || '') + ' ' + esc(r.zipcode || '') + '</span></td>'
+        + '<td>' + esc(r.form_location || '') + '</td>'
+        + '<td>' + inferSource(r) + '</td>'
+        + '<td class="mono muted">' + esc(r.ip_address || '') + '</td>'
+        + '</tr>';
+    }).join('');
+    document.getElementById('pager-info').textContent =
+      'Showing ' + (start + 1) + '–' + Math.min(start + PAGE_SIZE, leads.length)
+      + ' of ' + leads.length + ' (page ' + (page + 1) + ' of ' + totalPages + ')';
+    document.getElementById('prev-page').disabled = page === 0;
+    document.getElementById('next-page').disabled = page >= totalPages - 1;
+  }
+  document.getElementById('prev-page').onclick = function () { if (page > 0) { page--; renderTable(); } };
+  document.getElementById('next-page').onclick = function () { if (page < totalPages - 1) { page++; renderTable(); } };
+  renderTable();
+
+  /* ── Line chart: submissions per day, first submission → today ──────── */
+  var daily = (window.__DAILY__ || []).map(function (d) { return { day: d.day, count: d.count }; });
+  if (daily.length > 0) {
+    /* Fill in 0-count days so the line is continuous */
+    var firstDay = new Date(daily[0].day + 'T00:00:00');
+    var today    = new Date(); today.setHours(0,0,0,0);
+    var byDay = Object.create(null);
+    daily.forEach(function (d) { byDay[d.day] = d.count; });
+    var series = [];
+    for (var dt = new Date(firstDay); dt <= today; dt.setDate(dt.getDate() + 1)) {
+      var key = dt.toISOString().slice(0, 10);
+      series.push({ day: key, count: byDay[key] || 0, ts: dt.getTime() });
+    }
+
+    var W = 600, H = 240;
+    var padL = 36, padR = 16, padT = 16, padB = 28;
+    var innerW = W - padL - padR;
+    var innerH = H - padT - padB;
+    var maxCount = Math.max.apply(null, series.map(function (d) { return d.count; }));
+    maxCount = Math.max(1, maxCount);
+    var minTs = series[0].ts, maxTs = series[series.length - 1].ts;
+    var tsRange = Math.max(1, maxTs - minTs);
+    var xFor = function (ts) { return padL + ((ts - minTs) / tsRange) * innerW; };
+    var yFor = function (c)  { return padT + innerH - (c / maxCount) * innerH; };
+
+    var svg = document.getElementById('line-chart');
+    var NS = 'http://www.w3.org/2000/svg';
+    function el(name, attrs, text) {
+      var n = document.createElementNS(NS, name);
+      for (var k in attrs) n.setAttribute(k, attrs[k]);
+      if (text != null) n.textContent = text;
+      return n;
+    }
+
+    /* Y-axis gridlines */
+    var ticks = 4;
+    for (var i = 0; i <= ticks; i++) {
+      var v = Math.round((maxCount / ticks) * i);
+      var y = yFor(v);
+      svg.appendChild(el('line', { x1: padL, x2: W - padR, y1: y, y2: y, class: 'grid' }));
+      svg.appendChild(el('text', { x: padL - 6, y: y + 3, 'text-anchor': 'end' }, v));
+    }
+
+    /* X-axis date labels (first, middle, last) */
+    var labels = [0, Math.floor(series.length / 2), series.length - 1];
+    labels.forEach(function (idx) {
+      var d = series[idx];
+      var x = xFor(d.ts);
+      svg.appendChild(el('text', {
+        x: x, y: H - 8, 'text-anchor': idx === 0 ? 'start' : idx === series.length - 1 ? 'end' : 'middle'
+      }, new Date(d.ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })));
+    });
+
+    /* Axis lines */
+    svg.appendChild(el('line', { x1: padL, x2: padL, y1: padT, y2: H - padB, class: 'axis' }));
+    svg.appendChild(el('line', { x1: padL, x2: W - padR, y1: H - padB, y2: H - padB, class: 'axis' }));
+
+    /* Polyline */
+    var pts = series.map(function (d) { return xFor(d.ts) + ',' + yFor(d.count); }).join(' ');
+    svg.appendChild(el('polyline', { points: pts, class: 'line' }));
+
+    /* Dots (skip if lots of points to avoid clutter) */
+    if (series.length <= 60) {
+      series.forEach(function (d) {
+        var c = el('circle', { cx: xFor(d.ts), cy: yFor(d.count), r: 2.5, class: 'dot' });
+        var title = el('title', {}, d.day + ': ' + d.count);
+        c.appendChild(title);
+        svg.appendChild(c);
+      });
+    }
+  }
+
+  /* ── Map: circles per zipcode, sized + colored by count ─────────────── */
+  var zips = window.__ZIPS__ || [];
+  var zipCoords = window.__ZIP_COORDS__ || {};
+  var map = L.map('lead-map', { scrollWheelZoom: false, zoomControl: true })
+    .setView([43.165, -77.595], 10);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  var maxZipCount = zips.reduce(function (m, z) { return Math.max(m, z.count); }, 0) || 1;
+  var unmapped = [];
+  zips.forEach(function (z) {
+    var coord = zipCoords[z.zipcode];
+    if (!coord) { unmapped.push(z); return; }
+    /* Radius: 400m min → 2000m max based on intensity. Color: light→dark green. */
+    var intensity = z.count / maxZipCount;
+    var radius = 400 + intensity * 1600;
+    var alpha = 0.25 + intensity * 0.45;
+    L.circle(coord, {
+      color: '#2d7a3a',
+      weight: 1.5,
+      fillColor: '#2d7a3a',
+      fillOpacity: alpha,
+      radius: radius,
+    }).addTo(map).bindPopup(
+      '<strong>' + z.zipcode + '</strong><br>' + z.count + ' lead' + (z.count === 1 ? '' : 's')
+    );
+  });
+  if (unmapped.length) {
+    console.info('[dashboard] unmapped zipcodes (not in Rochester lookup):',
+      unmapped.map(function (z) { return z.zipcode + '(' + z.count + ')'; }).join(', '));
+  }
+})();
+</script>
 </body>
 </html>`;
 }
