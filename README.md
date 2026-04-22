@@ -44,6 +44,23 @@ DASHBOARD_USER=<admin username>
 DASHBOARD_PASSWORD=<admin password>
 ```
 
+## Mailchimp CSV Import
+One-off script to backfill existing Mailchimp subscribers into the `leads` table:
+
+```bash
+# Dry run first (no DB connection needed) — verifies CSV parses cleanly
+node scripts/import_mailchimp_csv.js path/to/export.csv --dry-run
+
+# Real import — requires the same DB env vars the app uses
+npm install  # if not already done
+DB_HOST=... DB_PORT=3306 DB_USER=... DB_PASSWORD=... DB_DB=... \
+  node scripts/import_mailchimp_csv.js path/to/export.csv
+```
+
+CSV format (no header): `email,zipcode,M/D/YY HH:MM`.
+
+Imported rows are tagged `form_location='mailchimp_import'` so they're distinguishable from real form submissions in the dashboard. Missing fields (name, street, city, state) are inserted as empty strings. Re-runs are idempotent — rows with the same `(email, created_at)` are skipped.
+
 ## Dashboard
 Admin view of captured leads is served at `/dashboard`, protected with HTTP Basic Auth.
 - Set `DASHBOARD_USER` / `DASHBOARD_PASSWORD` env vars. If unset, the endpoint returns 503.
