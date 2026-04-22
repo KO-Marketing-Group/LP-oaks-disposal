@@ -8,11 +8,8 @@
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.0",
-    "cookie-parser": "^1.4.6",
     "express": "^4.19.0",
-    "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.11.0",
-    "openid-client": "^5.7.0"
+    "mysql2": "^3.11.0"
   },
   "devDependencies": {
     "lightningcss-cli": "^1.28.0",
