@@ -39,9 +39,14 @@ MC_LIST_ID=f31112e9ba
 MC_DC=us14
 MC_TAG=OaksDisposal
 
-# Dashboard (Basic Auth at /dashboard)
-DASHBOARD_USER=<admin username>
-DASHBOARD_PASSWORD=<admin password>
+# Dashboard — Microsoft SSO at /dashboard (mirrors the Oaks Reporting project)
+AUTH_URL=<public base URL, e.g. https://oaksdisposal.com>
+AUTH_SECRET=<random 32+ char string; rotate to invalidate all sessions>
+AUTH_MICROSOFT_ENTRA_ID_ID=<Azure Application (client) ID>
+AUTH_MICROSOFT_ENTRA_ID_SECRET=<Azure Client Secret>
+# optional:
+# AUTH_MICROSOFT_ENTRA_ID_TENANT=common   # default "common" (multi-tenant)
+# AUTH_ALLOWED_DOMAINS=oaksinc.com,komarketingco.com,gravesbros.com   # default
 ```
 
 ## Mailchimp CSV Import
@@ -62,11 +67,25 @@ CSV format (no header): `email,zipcode,M/D/YY HH:MM`.
 Imported rows are tagged `form_location='mailchimp_import'` so they're distinguishable from real form submissions in the dashboard. Missing fields (name, street, city, state) are inserted as empty strings. Re-runs are idempotent — rows with the same `(email, created_at)` are skipped.
 
 ## Dashboard
-Admin view of captured leads is served at `/dashboard`, protected with HTTP Basic Auth.
-- Set `DASHBOARD_USER` / `DASHBOARD_PASSWORD` env vars. If unset, the endpoint returns 503.
-- Shows the most recent 500 leads (newest first), plus a total count.
-- Columns: ID, submitted, name, email, phone, full address, form location (hero/cta), traffic source, IP.
+Admin view of captured leads at `/dashboard`, protected by **Microsoft Entra ID SSO** (same pattern as the Oaks Reporting project, adapted to Express via `openid-client`).
+
+- **Sign-in flow**: unauthenticated request → `/auth/login` (Microsoft button) → Microsoft OAuth → `/auth/microsoft/callback` → signed JWT session cookie (24h) → redirect back to `/dashboard`.
+- **Domain restriction**: only `@oaksinc.com`, `@komarketingco.com`, `@gravesbros.com` (override via `AUTH_ALLOWED_DOMAINS`). Rejected emails show a clear error on the login page.
+- **Sign out**: link in the dashboard header clears the cookie.
+- **Only `/dashboard` is gated.** The main site, `/api/lead`, `/health`, `/live`, `/ready` remain public.
+- **If SSO env vars are missing**, `/dashboard` returns 503 — fails closed.
+- Shows the 500 most recent leads, a line chart of submissions per day, and a Rochester-area zipcode map.
+- Table paginates client-side at 10 rows/page.
 - `robots: noindex, nofollow` + `Cache-Control: no-store` — never indexed, never cached.
+
+### Azure app registration (one-time setup)
+1. Azure Portal → **App registrations** → **New registration**
+2. Supported account types: **Accounts in any organizational directory** (multi-tenant — matches `common` tenant)
+3. Redirect URI (Web): `https://oaksdisposal.com/auth/microsoft/callback`
+4. **Certificates & secrets** → New client secret → copy the **Value** (shown once only)
+5. Copy the **Application (client) ID** from the app's Overview page
+6. Set `AUTH_MICROSOFT_ENTRA_ID_ID` and `AUTH_MICROSOFT_ENTRA_ID_SECRET` in Sevalla's env vars
+7. Also set `AUTH_URL=https://oaksdisposal.com` and `AUTH_SECRET=<random 32+ chars>`
 
 ## Local development (Docker staging)
 - **Port:** 8082

@@ -3,6 +3,9 @@ const express = require('express');
 const sgMail = require('@sendgrid/mail');
 const mysql = require('mysql2/promise');
 const crypto = require('crypto');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
+const { Issuer, generators } = require('openid-client');
 
 /* ── Env vars ─────────────────────────────────────────────────────────────── */
 const SENDGRID_KEY = process.env.SENDGRID_KEY;
@@ -20,8 +23,18 @@ const MC_LIST_ID = process.env.MC_LIST_ID;
 const MC_DC      = process.env.MC_DC || (MC_API_KEY ? MC_API_KEY.split('-')[1] : '');
 const MC_TAG     = process.env.MC_TAG || 'OaksDisposal';
 
-const DASHBOARD_USER     = process.env.DASHBOARD_USER;
-const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD;
+/* Microsoft SSO for /dashboard (mirrors the Oaks Reporting project's Auth.js
+   config — same env var names, same OIDC flow, same domain allowlist). */
+const AUTH_URL    = process.env.AUTH_URL;
+const AUTH_SECRET = process.env.AUTH_SECRET;
+const MS_CLIENT_ID     = process.env.AUTH_MICROSOFT_ENTRA_ID_ID;
+const MS_CLIENT_SECRET = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET;
+const MS_TENANT_ID     = process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT || 'common';
+const AUTH_ALLOWED_DOMAINS = (process.env.AUTH_ALLOWED_DOMAINS ||
+  'oaksinc.com,komarketingco.com,gravesbros.com')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+const OAUTH_STATE_COOKIE = 'oaks_oauth_state';
+const SESSION_COOKIE     = 'oaks_session';
 
 if (!SENDGRID_KEY || TO_EMAIL.length === 0 || !FROM_EMAIL) {
   console.warn('WARNING: Missing SendGrid env vars (SENDGRID_KEY, SENDGRID_TO, SENDGRID_FROM). Lead emails will fail.');
@@ -32,8 +45,8 @@ if (!DB_HOST || !DB_USER || !DB_PASSWORD || !DB_DB) {
 if (!MC_API_KEY || !MC_LIST_ID || !MC_DC) {
   console.warn('WARNING: Missing Mailchimp env vars (MC_API_KEY, MC_LIST_ID, MC_DC). Mailchimp sync will fail.');
 }
-if (!DASHBOARD_USER || !DASHBOARD_PASSWORD) {
-  console.warn('WARNING: Missing DASHBOARD_USER / DASHBOARD_PASSWORD. /dashboard will return 503 until configured.');
+if (!AUTH_URL || !AUTH_SECRET || !MS_CLIENT_ID || !MS_CLIENT_SECRET) {
+  console.warn('WARNING: Missing Microsoft SSO env vars (AUTH_URL, AUTH_SECRET, AUTH_MICROSOFT_ENTRA_ID_ID, AUTH_MICROSOFT_ENTRA_ID_SECRET). /dashboard will return 503 until configured.');
 }
 
 if (SENDGRID_KEY) sgMail.setApiKey(SENDGRID_KEY);
@@ -128,6 +141,7 @@ async function ensureSchema() {
 
 /* ── Express ──────────────────────────────────────────────────────────────── */
 const app = express();
+app.use(cookieParser());
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
@@ -331,35 +345,172 @@ app.post('/sendgrid-events', express.json({ limit: '1mb' }), (req, res) => {
   res.status(200).end();
 });
 
-/* ── Dashboard (Basic Auth protected) ─────────────────────────────────────── */
-function timingSafeStringEq(a, b) {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  return ab.length === bb.length && crypto.timingSafeEqual(ab, bb);
+/* ── Microsoft SSO for /dashboard ─────────────────────────────────────────
+   Mirrors the Oaks Reporting project's Auth.js setup: Microsoft Entra ID
+   (multi-tenant, default "common"), domain allowlist, JWT session cookie.
+   Apply `requireAuth` middleware to any route that needs protection. */
+
+let oidcClient = null;
+async function initOidc() {
+  if (!AUTH_URL || !AUTH_SECRET || !MS_CLIENT_ID || !MS_CLIENT_SECRET) return;
+  try {
+    const issuer = await Issuer.discover(`https://login.microsoftonline.com/${MS_TENANT_ID}/v2.0`);
+    oidcClient = new issuer.Client({
+      client_id: MS_CLIENT_ID,
+      client_secret: MS_CLIENT_SECRET,
+      redirect_uris: [`${AUTH_URL}/auth/microsoft/callback`],
+      response_types: ['code'],
+    });
+    console.log('[auth] Microsoft OIDC client initialized');
+  } catch (err) {
+    console.error('[auth] OIDC discovery failed:', err.message);
+  }
 }
 
-function basicAuth(req, res, next) {
-  if (!DASHBOARD_USER || !DASHBOARD_PASSWORD) {
-    return res.status(503).type('text/plain').send('Dashboard not configured. Set DASHBOARD_USER and DASHBOARD_PASSWORD env vars.');
+function getSessionUser(req) {
+  const token = req.cookies && req.cookies[SESSION_COOKIE];
+  if (!token || !AUTH_SECRET) return null;
+  try { return jwt.verify(token, AUTH_SECRET); } catch (err) { return null; }
+}
+
+function requireAuth(req, res, next) {
+  if (!AUTH_URL || !AUTH_SECRET || !MS_CLIENT_ID || !MS_CLIENT_SECRET) {
+    return res.status(503).type('text/plain')
+      .send('Dashboard not configured. Set AUTH_URL, AUTH_SECRET, AUTH_MICROSOFT_ENTRA_ID_ID, AUTH_MICROSOFT_ENTRA_ID_SECRET env vars.');
   }
-  const header = req.headers.authorization || '';
-  const [scheme, token] = header.split(' ');
-  if (scheme === 'Basic' && token) {
-    const decoded = Buffer.from(token, 'base64').toString('utf8');
-    const sep = decoded.indexOf(':');
-    if (sep !== -1) {
-      const u = decoded.slice(0, sep);
-      const p = decoded.slice(sep + 1);
-      if (timingSafeStringEq(u, DASHBOARD_USER) && timingSafeStringEq(p, DASHBOARD_PASSWORD)) {
-        return next();
-      }
+  const user = getSessionUser(req);
+  if (user) { req.user = user; return next(); }
+  const returnTo = req.originalUrl && req.originalUrl.startsWith('/') ? req.originalUrl : '/dashboard';
+  res.redirect('/auth/login?returnTo=' + encodeURIComponent(returnTo));
+}
+
+function isSecureCookie() {
+  return typeof AUTH_URL === 'string' && AUTH_URL.startsWith('https://');
+}
+
+/* Minimal login landing — shows Microsoft button and any error message. */
+app.get('/auth/login', (req, res) => {
+  const err = req.query.error ? String(req.query.error) : '';
+  const returnTo = (req.query.returnTo && String(req.query.returnTo).startsWith('/'))
+    ? String(req.query.returnTo) : '/dashboard';
+  const signInHref = '/auth/microsoft/login?returnTo=' + encodeURIComponent(returnTo);
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Sign in | Oaks Disposal</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: #f5f5f5; color: #222; }
+  .card { background: #fff; border-radius: 8px; padding: 40px; max-width: 400px; width: 90%;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08); text-align: center; }
+  h1 { margin: 0 0 8px; font-size: 1.3rem; color: #2d7a3a; }
+  p.sub { margin: 0 0 24px; color: #666; font-size: 0.9rem; }
+  a.btn { display: inline-flex; align-items: center; gap: 10px; background: #2f2f2f; color: #fff;
+    padding: 12px 24px; border-radius: 4px; text-decoration: none; font-weight: 500; font-size: 0.95rem; }
+  a.btn:hover { background: #000; }
+  a.btn svg { width: 18px; height: 18px; }
+  .error { background: #fff5f4; border: 1px solid #f0c7c3; color: #c0392b; padding: 10px 14px;
+    border-radius: 4px; font-size: 0.85rem; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Oaks Disposal — Admin</h1>
+    <p class="sub">Sign in to view the leads dashboard.</p>
+    ${err ? `<div class="error">${esc(err)}</div>` : ''}
+    <a class="btn" href="${esc(signInHref)}">
+      <svg viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1"  y="1"  width="10" height="10" fill="#f25022"/>
+        <rect x="12" y="1"  width="10" height="10" fill="#7fba00"/>
+        <rect x="1"  y="12" width="10" height="10" fill="#00a4ef"/>
+        <rect x="12" y="12" width="10" height="10" fill="#ffb900"/>
+      </svg>
+      Sign in with Microsoft
+    </a>
+  </div>
+</body>
+</html>`);
+});
+
+/* Start OIDC flow: build authorize URL, stash PKCE/state/nonce in a signed cookie. */
+app.get('/auth/microsoft/login', (req, res) => {
+  if (!oidcClient) return res.redirect('/auth/login?error=' + encodeURIComponent('SSO not configured'));
+  const state         = generators.state();
+  const nonce         = generators.nonce();
+  const code_verifier = generators.codeVerifier();
+  const code_challenge = generators.codeChallenge(code_verifier);
+  const returnTo = (req.query.returnTo && String(req.query.returnTo).startsWith('/'))
+    ? String(req.query.returnTo) : '/dashboard';
+  const stateToken = jwt.sign({ state, nonce, code_verifier, returnTo }, AUTH_SECRET, { expiresIn: '10m' });
+  res.cookie(OAUTH_STATE_COOKIE, stateToken, {
+    httpOnly: true, secure: isSecureCookie(), sameSite: 'lax', maxAge: 10 * 60 * 1000, path: '/auth',
+  });
+  const url = oidcClient.authorizationUrl({
+    scope: 'openid profile email',
+    state, nonce,
+    code_challenge, code_challenge_method: 'S256',
+    prompt: 'select_account',
+  });
+  res.redirect(url);
+});
+
+/* Handle OIDC callback: verify ID token, enforce domain allowlist, issue session cookie. */
+app.get('/auth/microsoft/callback', async (req, res) => {
+  if (!oidcClient) return res.redirect('/auth/login?error=' + encodeURIComponent('SSO not configured'));
+  const stateToken = req.cookies && req.cookies[OAUTH_STATE_COOKIE];
+  if (!stateToken) return res.redirect('/auth/login?error=' + encodeURIComponent('Session expired, try again'));
+  let stateData;
+  try { stateData = jwt.verify(stateToken, AUTH_SECRET); }
+  catch (err) { return res.redirect('/auth/login?error=' + encodeURIComponent('Invalid state')); }
+  res.clearCookie(OAUTH_STATE_COOKIE, { path: '/auth' });
+
+  try {
+    const params = oidcClient.callbackParams(req);
+    const tokenSet = await oidcClient.callback(
+      `${AUTH_URL}/auth/microsoft/callback`,
+      params,
+      { state: stateData.state, nonce: stateData.nonce, code_verifier: stateData.code_verifier }
+    );
+    const claims = tokenSet.claims();
+    const email = String(claims.email || claims.preferred_username || '').toLowerCase();
+    if (!email || !email.includes('@')) {
+      return res.redirect('/auth/login?error=' + encodeURIComponent('No email returned from Microsoft'));
     }
+    const domain = email.split('@')[1];
+    if (AUTH_ALLOWED_DOMAINS.length && !AUTH_ALLOWED_DOMAINS.includes(domain)) {
+      console.warn(`[auth] domain not allowed: ${domain}`);
+      return res.redirect('/auth/login?error=' + encodeURIComponent(`Your domain (${domain}) is not authorized`));
+    }
+    const session = jwt.sign(
+      { email, name: claims.name || email, sub: claims.sub },
+      AUTH_SECRET,
+      { expiresIn: '24h' }
+    );
+    res.cookie(SESSION_COOKIE, session, {
+      httpOnly: true, secure: isSecureCookie(), sameSite: 'lax',
+      maxAge: 24 * 60 * 60 * 1000, path: '/',
+    });
+    const returnTo = (stateData.returnTo && String(stateData.returnTo).startsWith('/'))
+      ? String(stateData.returnTo) : '/dashboard';
+    console.log(`[auth] signed in: ${email}`);
+    res.redirect(returnTo);
+  } catch (err) {
+    console.error('[auth] callback error:', err.message);
+    res.redirect('/auth/login?error=' + encodeURIComponent('Sign-in failed'));
   }
-  res.set('WWW-Authenticate', 'Basic realm="Oaks Dashboard", charset="UTF-8"');
-  res.status(401).type('text/plain').send('Authentication required');
-}
+});
 
-app.get('/dashboard', basicAuth, async (req, res) => {
+/* Sign out: clear the session cookie and redirect to login. */
+app.get('/auth/logout', (req, res) => {
+  res.clearCookie(SESSION_COOKIE, { path: '/' });
+  res.redirect('/auth/login');
+});
+
+app.get('/dashboard', requireAuth, async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT id, created_at, first_name, last_name, email, phone, street, city, state, zipcode,
@@ -381,7 +532,7 @@ app.get('/dashboard', basicAuth, async (req, res) => {
        ORDER BY count DESC`
     );
     res.set('Cache-Control', 'no-store');
-    res.type('html').send(renderDashboard(rows, totals.total, dailyCounts, zipCounts));
+    res.type('html').send(renderDashboard(rows, totals.total, dailyCounts, zipCounts, req.user));
   } catch (err) {
     console.error('[dashboard-error]', err.message);
     res.status(500).type('text/plain').send('Database error loading dashboard');
@@ -389,7 +540,7 @@ app.get('/dashboard', basicAuth, async (req, res) => {
 });
 
 /* ── Startup ──────────────────────────────────────────────────────────────── */
-ensureSchema().finally(() => {
+Promise.allSettled([ensureSchema(), initOidc()]).finally(() => {
   app.listen(3000, () => console.log('Lead mailer listening on :3000'));
 });
 
@@ -516,7 +667,7 @@ function safeJson(obj) {
     .replace(/\u2029/g, '\\u2029');
 }
 
-function renderDashboard(rows, total, dailyCounts, zipCounts) {
+function renderDashboard(rows, total, dailyCounts, zipCounts, user) {
   /* Emit data the client JS consumes. Keep the shape tight — this is an
      admin view loaded on demand, not a public API. */
   const leadsJson = safeJson(rows.map(r => ({
@@ -610,7 +761,11 @@ function renderDashboard(rows, total, dailyCounts, zipCounts) {
 <body>
 <header>
   <h1>Oaks Disposal — Leads</h1>
-  <div class="stats">${total} total · <a href="/">site</a></div>
+  <div class="stats">
+    ${total} total ·
+    ${user ? `signed in as ${esc(user.email || '')} · <a href="/auth/logout">sign out</a> · ` : ''}
+    <a href="/">site</a>
+  </div>
 </header>
 <main>
   ${empty ? '<p class="empty">No leads yet. Submit the form on the main site to see entries here.</p>' : `
