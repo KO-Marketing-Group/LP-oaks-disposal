@@ -567,12 +567,27 @@ function renderDashboard(rows, total, dailyCounts, zipCounts) {
   @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
   .card { background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); padding: 16px; }
   .card h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #555; }
-  #line-chart { width: 100%; height: 240px; }
+  .chart-wrap { position: relative; }
+  #line-chart { width: 100%; height: 240px; display: block; }
   #line-chart .axis { stroke: #ccc; stroke-width: 1; }
   #line-chart .grid { stroke: #eee; stroke-width: 1; }
   #line-chart .line { fill: none; stroke: #2d7a3a; stroke-width: 2; }
   #line-chart .dot { fill: #2d7a3a; }
   #line-chart text { fill: #666; font-size: 10px; font-family: inherit; }
+  #line-chart-tooltip {
+    position: absolute; display: none; pointer-events: none;
+    transform: translate(-50%, -100%);
+    background: #222; color: #fff; padding: 6px 10px; border-radius: 4px;
+    font-size: 12px; line-height: 1.4; white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10;
+  }
+  #line-chart-tooltip::after {
+    content: ''; position: absolute; top: 100%; left: 50%;
+    transform: translateX(-50%); border: 5px solid transparent;
+    border-top-color: #222;
+  }
+  #line-chart-tooltip .tt-date  { opacity: 0.75; font-size: 11px; }
+  #line-chart-tooltip .tt-count { font-weight: 600; font-size: 13px; }
   #lead-map { width: 100%; height: 320px; border-radius: 4px; }
   .table-wrap { background: #fff; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); overflow-x: auto; }
   table { border-collapse: collapse; width: 100%; min-width: 1100px; font-size: 13px; }
@@ -602,7 +617,10 @@ function renderDashboard(rows, total, dailyCounts, zipCounts) {
   <div class="charts">
     <div class="card">
       <h2>Submissions per day</h2>
-      <svg id="line-chart" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+      <div class="chart-wrap">
+        <svg id="line-chart" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+        <div id="line-chart-tooltip"></div>
+      </div>
     </div>
     <div class="card">
       <h2>Submissions by zipcode</h2>
@@ -757,15 +775,49 @@ function renderDashboard(rows, total, dailyCounts, zipCounts) {
     var pts = series.map(function (d) { return xFor(d.ts) + ',' + yFor(d.count); }).join(' ');
     svg.appendChild(el('polyline', { points: pts, class: 'line' }));
 
-    /* Dots (skip if lots of points to avoid clutter) */
-    if (series.length <= 60) {
+    /* Visible dots — only for small series, to avoid visual clutter. */
+    var showDots = series.length <= 60;
+    if (showDots) {
       series.forEach(function (d) {
-        var c = el('circle', { cx: xFor(d.ts), cy: yFor(d.count), r: 2.5, class: 'dot' });
-        var title = el('title', {}, d.day + ': ' + d.count);
-        c.appendChild(title);
-        svg.appendChild(c);
+        svg.appendChild(el('circle', { cx: xFor(d.ts), cy: yFor(d.count), r: 2.5, class: 'dot' }));
       });
     }
+
+    /* Hover tooltip — invisible hit circles covering each data point trigger
+       a styled HTML tooltip. Radius 8 gives a generous hover target; always
+       rendered so long series are still interactive. */
+    var tooltip = document.getElementById('line-chart-tooltip');
+    var hoverMarker = el('circle', { r: 4, class: 'dot', style: 'display:none;pointer-events:none' });
+    svg.appendChild(hoverMarker);
+    series.forEach(function (d) {
+      var hit = el('circle', {
+        cx: xFor(d.ts), cy: yFor(d.count), r: 10,
+        fill: 'transparent', stroke: 'none', style: 'cursor:crosshair'
+      });
+      hit.addEventListener('mouseenter', function () {
+        var rect = svg.getBoundingClientRect();
+        var sx = rect.width  / W;
+        var sy = rect.height / H;
+        var pxX = xFor(d.ts) * sx;
+        var pxY = yFor(d.count) * sy;
+        tooltip.innerHTML =
+          '<div class="tt-date">' + new Date(d.ts).toLocaleDateString('en-US',
+            { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + '</div>' +
+          '<div class="tt-count">' + d.count + ' submission' + (d.count === 1 ? '' : 's') + '</div>';
+        tooltip.style.display = 'block';
+        /* Position above the point, centered */
+        tooltip.style.left = pxX + 'px';
+        tooltip.style.top  = (pxY - 12) + 'px';
+        hoverMarker.setAttribute('cx', xFor(d.ts));
+        hoverMarker.setAttribute('cy', yFor(d.count));
+        hoverMarker.style.display = '';
+      });
+      hit.addEventListener('mouseleave', function () {
+        tooltip.style.display = 'none';
+        hoverMarker.style.display = 'none';
+      });
+      svg.appendChild(hit);
+    });
   }
 
   /* ── Map: circles per zipcode, sized + colored by count ─────────────── */
