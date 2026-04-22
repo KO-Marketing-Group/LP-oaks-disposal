@@ -9,6 +9,7 @@ RUN npm install
 
 # App code
 COPY server.js ./
+COPY scripts/ ./scripts/
 
 # Nginx config + static site
 COPY nginx.conf /etc/nginx/conf.d/default.conf
