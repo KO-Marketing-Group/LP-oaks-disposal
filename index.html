@@ -169,7 +169,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       </div>
       <div class="field-row">
         <div class="field"><input type="email" name="email" placeholder="Email Address" autocomplete="email" required tabindex="22"></div>
-        <div class="field"><input type="tel" name="phone" placeholder="Phone (optional)" autocomplete="tel" inputmode="tel" maxlength="14" tabindex="23"></div>
+        <div class="field"><input type="tel" name="phone" placeholder="Phone" autocomplete="tel" inputmode="tel" maxlength="14" required tabindex="23"></div>
       </div>
       <div class="field-row">
         <div class="field"><input type="text" name="street" placeholder="Street Address" autocomplete="address-line1" required tabindex="24"></div>
@@ -263,7 +263,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     function validateForm(form) {
       var ok = true;
-      var required = ['first_name','last_name','email','street','city','state','zipcode'];
+      var required = ['first_name','last_name','email','phone','street','city','state','zipcode'];
       required.forEach(function (name) {
         var f = form.querySelector('[name="' + name + '"]');
         if (!f) return;
@@ -279,7 +279,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         setError(zip, '5-digit zipcode'); ok = false;
       }
       var phone = form.querySelector('[name="phone"]');
-      if (phone && phone.value.trim() && !isValidPhone(phone.value)) {
+      if (phone && phone.value.trim() && digitsOnly(phone.value).length !== 10) {
         setError(phone, 'Enter a 10-digit phone'); ok = false;
       }
       return ok;

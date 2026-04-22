@@ -185,7 +185,7 @@ app.post('/lead', express.json({ limit: '10kb' }), async (req, res) => {
   if (!first_name || first_name.length > 100) errors.push('first_name');
   if (!last_name  || last_name.length  > 100) errors.push('last_name');
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('email');
-  if (phoneRaw && phoneRaw.length !== 10) errors.push('phone');
+  if (phoneRaw.length !== 10) errors.push('phone');
   if (!street  || street.length  > 200) errors.push('street');
   if (!city    || city.length    > 100) errors.push('city');
   if (!/^[A-Z]{2}$/.test(state))         errors.push('state');
@@ -208,7 +208,7 @@ app.post('/lead', express.json({ limit: '10kb' }), async (req, res) => {
     first_name,
     last_name,
     email,
-    phone: phoneRaw || null,
+    phone: phoneRaw,
     street,
     city,
     state,
