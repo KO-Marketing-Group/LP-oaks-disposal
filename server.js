@@ -30,8 +30,9 @@ const AUTH_SECRET = process.env.AUTH_SECRET;
 const MS_CLIENT_ID     = process.env.AUTH_MICROSOFT_ENTRA_ID_ID;
 const MS_CLIENT_SECRET = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET;
 const MS_TENANT_ID     = process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT || 'common';
-const AUTH_ALLOWED_DOMAINS = (process.env.AUTH_ALLOWED_DOMAINS ||
-  'oaksinc.com,komarketingco.com,gravesbros.com')
+/* Empty list = allow any email that successfully authenticates against the
+   configured tenant. Set AUTH_ALLOWED_DOMAINS to restrict further. */
+const AUTH_ALLOWED_DOMAINS = (process.env.AUTH_ALLOWED_DOMAINS || '')
   .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const OAUTH_STATE_COOKIE = 'oaks_oauth_state';
 const SESSION_COOKIE     = 'oaks_session';

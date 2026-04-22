@@ -46,7 +46,7 @@ AUTH_MICROSOFT_ENTRA_ID_ID=<Azure Application (client) ID>
 AUTH_MICROSOFT_ENTRA_ID_SECRET=<Azure Client Secret>
 # optional:
 # AUTH_MICROSOFT_ENTRA_ID_TENANT=common   # default "common" (multi-tenant)
-# AUTH_ALLOWED_DOMAINS=oaksinc.com,komarketingco.com,gravesbros.com   # default
+# AUTH_ALLOWED_DOMAINS=oaksinc.com,komarketingco.com   # optional; empty = allow any email that authenticates
 ```
 
 ## Mailchimp CSV Import
@@ -70,7 +70,7 @@ Imported rows are tagged `form_location='mailchimp_import'` so they're distingui
 Admin view of captured leads at `/dashboard`, protected by **Microsoft Entra ID SSO** (same pattern as the Oaks Reporting project, adapted to Express via `openid-client`).
 
 - **Sign-in flow**: unauthenticated request → `/auth/login` (Microsoft button) → Microsoft OAuth → `/auth/microsoft/callback` → signed JWT session cookie (24h) → redirect back to `/dashboard`.
-- **Domain restriction**: only `@oaksinc.com`, `@komarketingco.com`, `@gravesbros.com` (override via `AUTH_ALLOWED_DOMAINS`). Rejected emails show a clear error on the login page.
+- **Domain restriction**: by default, any email that successfully authenticates against the configured tenant is allowed. Set `AUTH_ALLOWED_DOMAINS` (comma-separated list) to restrict further. Rejected emails show a clear error on the login page.
 - **Sign out**: link in the dashboard header clears the cookie.
 - **Only `/dashboard` is gated.** The main site, `/api/lead`, `/health`, `/live`, `/ready` remain public.
 - **If SSO env vars are missing**, `/dashboard` returns 503 — fails closed.
