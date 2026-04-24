@@ -80,14 +80,16 @@ Visit http://localhost:8082/ and submit a test form. Verify:
 ## Database schema
 A single `leads` table is created on startup via `CREATE TABLE IF NOT EXISTS`. Schema in [`server.js`](server.js).
 
-## Health Probes
+## Health & Readiness
 
-| Probe | Path | Port | What it checks | Failure action |
-|-------|------|------|----------------|----------------|
-| Liveness | `/live` | 80 | nginx responding | Restart container |
-| Readiness | `/ready` | 80 | Node responding + MySQL `SELECT 1` succeeds | Remove from LB (no restart) |
+Two probe endpoints served by nginx. Both return plain text with `Cache-Control: no-store` so no intermediate cache (Cloudflare, Sevalla ingress) can pin a stale state across an outage.
 
-Configure both in Sevalla's probe settings. `/health` is kept as a legacy alias for `/live`.
+| Endpoint | Semantics | Returns | Consumers |
+|----------|-----------|---------|-----------|
+| `/health` | Liveness — nginx is running | `200 ok` always | Sevalla liveness probe (failure restarts container) |
+| `/ready` | Readiness — Node responding + MySQL `SELECT 1` succeeds | `200 ok` or `503 db unavailable` | Sevalla readiness probe (failure removes pod from LB, no restart); Pingdom external uptime |
+
+**Pingdom uptime monitor:** one HTTP(S) check on the production domain hitting `/ready`. Confirms DNS + TLS + nginx + Node + DB end-to-end. Use `ok` as the string match and ~1 min interval. URL: `https://<production-host>/ready`.
 
 ## SendGrid Event Webhook
 Register `https://<production-host>/api/sendgrid-events` in SendGrid:

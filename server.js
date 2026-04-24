@@ -129,18 +129,21 @@ app.use((req, res, next) => {
   next();
 });
 
-/* Liveness — nginx handles /live directly, this is here only as a fallback
-   if something is ever proxied to Node without a DB check. */
-app.get('/live', (req, res) => res.json({ ok: true }));
-
 /* Readiness — verifies the DB pool is responsive. 503 → Sevalla pulls the
-   pod out of the load balancer (but doesn't restart it). */
+   pod out of the load balancer (but doesn't restart it). Also the endpoint
+   Pingdom hits for external uptime monitoring, so response is plain text +
+   no-cache so no intermediate cache can serve a stale ready state. nginx
+   adds matching headers as a safety net if anything bypasses this handler. */
 app.get('/ready', async (req, res) => {
+  res.set({
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+  });
   try {
     await pool.query('SELECT 1');
-    res.json({ ok: true });
+    res.send('ok');
   } catch (err) {
-    res.status(503).json({ ok: false, error: 'db unavailable' });
+    res.status(503).send('db unavailable');
   }
 });
 
